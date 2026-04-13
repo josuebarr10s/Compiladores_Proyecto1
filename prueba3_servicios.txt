@@ -1,0 +1,35 @@
+// =============================================
+// PRUEBA 3 — Empresa de Servicios (Limpieza)
+// =============================================
+
+Empresa: "LimpiezaPro";
+
+// Empleados disponibles
+Empleado: Ana;
+Categoria: "Limpieza Residencial";
+Disponible Ana;
+
+Empleado: Roberto;
+Categoria: "Limpieza Comercial";
+Disponible Roberto;
+
+// Registro del servicio como pedido
+Cliente: FamiliaGarcia;
+Telefono: "44556677";
+Direccion: "Zona 7, Casa 15";
+Nota: "Limpiar 3 habitaciones y sala";
+Fecha: "2026-04-01";
+
+Crear Pedido: S001;
+Descripcion: "Servicio Limpieza Residencial";
+Precio: 350.00;
+Asignar Empleado S001: Ana;
+Confirmar S001;
+Procesando S001;
+Listo S001;
+Cobrar S001;
+Factura S001;
+
+// Cierre con estado final
+Entregado S001;
+Recibido S001;

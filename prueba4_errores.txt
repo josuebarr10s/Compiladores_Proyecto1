@@ -1,0 +1,28 @@
+// =============================================
+// PRUEBA 4 — Errores lexicos mezclados
+// =============================================
+
+// Error 1: identificador inicia con numero
+Pedido: 01Pedido;
+
+// Error 2: simbolo no definido en el lenguaje
+Cliente: @Juan;
+Precio: 500#;
+
+// Error 3: identificador valido despues del error
+Cliente: Maria;
+Pedido: P005;
+Precio: 1500.00;
+
+// Error 4: otro simbolo invalido
+Total: 1500 & 0;
+
+// Tokens validos al final
+Confirmar P005;
+Asignar Repartidor P005: Luis;
+EnRuta P005;
+Entregado P005;
+
+// Error 5: cadena sin cerrar
+Nota: "Este pedido no tiene fin;
+Cobrar P005;

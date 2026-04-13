@@ -1,0 +1,41 @@
+// =============================================
+// PRUEBA 2 — Tienda Fisica con Envio
+// =============================================
+
+Empresa: "Ferreteria Lopez";
+
+// Gestion de proveedor
+Proveedor: ProvHerramientas;
+Referencia: "PROV-2026-01";
+
+// Control de inventario
+Producto: "Taladro Industrial";
+Stock 15;
+Minimo: 5;
+Maximo: 50;
+Precio: 1250.00;
+
+Producto: "Tornillos Caja";
+Stock 3;
+Minimo: 10;
+
+// Control de flujo: reponer si stock bajo minimo
+Si Stock: 3;
+    Reponer Producto: "Tornillos Caja";
+    Cantidad: 50;
+Sino
+    Disponible Producto: "Tornillos Caja";
+Fin
+
+// Pedido con envio
+Cliente: EmpresaABC;
+Telefono: "22334455";
+Direccion: "Zona 12, Bodega 3";
+Crear Pedido: P002;
+Producto: "Taladro Industrial";
+Cantidad: 2;
+Total: 2500.00;
+Asignar Repartidor P002: Miguel;
+EnRuta P002;
+Entregado P002;
+Factura P002;

@@ -1,0 +1,34 @@
+// =============================================
+// PRUEBA 1 — Restaurante / Delivery
+// =============================================
+
+Empresa: "Burger Express";
+Sucursal: "Central";
+
+// Registro de cliente
+Cliente: Juan;
+Telefono: "55512345";
+Direccion: "Zona 4, Calle Principal";
+
+// Creacion del pedido
+Crear Pedido: P001;
+Producto: "Hamburguesa Clasica";
+Cantidad: 2;
+Precio: 85;
+Producto: "Refresco Grande";
+Cantidad: 2;
+Precio: 25;
+
+// Facturacion
+Subtotal: 220;
+Descuento: 10;
+Impuesto: 22;
+Total: 232;
+
+// Ciclo de vida del pedido
+Confirmar P001;
+Asignar Repartidor P001: Carlos;
+Procesando P001;
+EnRuta P001;
+Entregado P001;
+Cobrar P001;

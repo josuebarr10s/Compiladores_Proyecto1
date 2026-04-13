@@ -715,7 +715,7 @@ class AnalizadorApp(QMainWindow):
             self.setWindowIcon(QIcon(_icon_path))
         self.resize(1400, 900)
         self._filename = "sin_titulo.txt"
-        self._results_font_size = 12
+        self._results_font_size = 10.2
         self._results_font_min = 9
         self._results_font_max = 20
         self._build_ui()
@@ -1160,8 +1160,10 @@ class AnalizadorApp(QMainWindow):
         self._tree_zoom_reset_btn.setText(f"{zoom}%")
 
     def _apply_results_table_font(self):
-        table_font = QFont("Consolas", self._results_font_size)
-        header_font = QFont("Consolas", max(10, self._results_font_size - 1))
+        table_font = QFont("Consolas")
+        table_font.setPointSizeF(self._results_font_size)
+        header_font = QFont("Consolas")
+        header_font.setPointSizeF(max(10, self._results_font_size - 1))
         row_height = QFontMetricsF(table_font).height() + 10
         header_height = int(QFontMetricsF(header_font).height() + 14)
         for table in (self._token_table, self._error_table, self._synerr_table):

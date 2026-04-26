@@ -1,0 +1,455 @@
+\documentclass[12pt,letterpaper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage[left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{listings}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{upquote}
+\usepackage{float}
+
+\definecolor{navy}{HTML}{1F3864}
+\definecolor{blue}{HTML}{2E5FA3}
+\definecolor{lblue}{HTML}{D9E8F5}
+\definecolor{dgray}{HTML}{595959}
+\definecolor{lgray}{HTML}{F2F2F2}
+\definecolor{red}{HTML}{C00000}
+\definecolor{green}{HTML}{375623}
+\definecolor{codebg}{HTML}{161B22}
+\definecolor{codefg}{HTML}{C9D1D9}
+\definecolor{errorbg}{HTML}{FFF2F2}
+\definecolor{rowhl}{HTML}{E2EFD9}
+\definecolor{headerbg}{HTML}{2E5FA3}
+
+\titleformat{\section}{\Large\bfseries\color{navy}}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{blue}}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{dgray}}{\thesubsubsection}{0.6em}{}
+\titlespacing{\section}{0pt}{18pt}{8pt}
+\titlespacing{\subsection}{0pt}{12pt}{4pt}
+\titlespacing{\subsubsection}{0pt}{8pt}{4pt}
+
+\lstdefinestyle{code}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small\color{codefg},
+  breaklines=true,
+  frame=single,
+  framesep=6pt,
+  rulecolor=\color{blue!40},
+  xleftmargin=12pt,
+  xrightmargin=12pt,
+  aboveskip=8pt,
+  belowskip=8pt,
+  showstringspaces=false,
+  upquote=true,
+}
+
+\lstdefinestyle{error}{
+  backgroundcolor=\color{errorbg},
+  basicstyle=\ttfamily\small\color{red},
+  breaklines=true,
+  frame=single,
+  framesep=6pt,
+  rulecolor=\color{red},
+  xleftmargin=12pt,
+  xrightmargin=12pt,
+  aboveskip=8pt,
+  belowskip=8pt,
+  showstringspaces=false,
+  upquote=true,
+}
+
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\thead}[1]{\cellcolor{headerbg}\textcolor{white}{\textbf{#1}}}
+\newcommand{\mv}[1]{{\ttfamily #1}}
+\newcommand{\mq}[1]{{\ttfamily \textquotedbl #1\textquotedbl}}
+
+\pagestyle{plain}
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+\section*{El programa tiene sentido}
+
+En esta fase del proyecto de Compiladores, el objetivo ya no es solo reconocer
+tokens ni validar la forma del programa. Ahora se busca comprobar si las
+instrucciones tienen coherencia dentro del lenguaje del proyecto.
+
+Nuestro lenguaje trabaja con pedidos, clientes, empleados, productos,
+cantidades, montos y cambios de estado. Por eso, el an\'alisis sem\'antico debe
+revisar si cada acci\'on tiene sentido dentro de ese flujo.
+
+\section{Descripci\'on de la fase}
+
+Hasta este punto, el sistema ya debe reconocer tokens por medio del an\'alisis
+l\'exico y validar la estructura general por medio del an\'alisis sint\'actico.
+
+La siguiente pregunta es si el programa tiene sentido.
+
+En esta etapa se busca detectar problemas como los siguientes:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item uso de pedidos no creados
+  \item redeclaraci\'on de pedidos
+  \item incompatibilidad entre campos y valores
+  \item asignaciones que no coinciden con lo registrado
+  \item uso inv\'alido de identificadores
+\end{itemize}
+
+Tambi\'en se dise\~na la tabla de s\'imbolos y se define c\'omo debe construirse
+durante el an\'alisis. Esta tabla no se llena de forma manual.
+
+\section{Definici\'on de las reglas sem\'anticas de nuestro lenguaje}
+
+\subsection*{Qu\'e se valida en el an\'alisis sem\'antico}
+
+En esta fase s\'i se revisa si las instrucciones del programa tienen sentido
+dentro del lenguaje. El objetivo es comprobar que lo que ya fue aceptado por el
+an\'alisis l\'exico y sint\'actico tambi\'en sea coherente en su uso.
+
+\renewcommand{\arraystretch}{1.4}
+\begin{table}[H]
+\centering
+\begin{tabular}{L{3.5cm} L{8.1cm} L{3.3cm}}
+\toprule
+\thead{Regla} & \thead{Descripci\'on} & \thead{Ejemplo} \\
+\midrule
+\rowcolor{lblue}
+\textbf{Existencia del pedido}
+  & No se puede confirmar, procesar, entregar, cobrar o facturar un pedido
+    que no haya sido creado antes.
+  & \mv{Confirmar P900;} \\
+\rowcolor{lblue}
+\textbf{Identificador \'unico}
+  & Un pedido no puede crearse dos veces con el mismo nombre.
+  & \mv{Crear Pedido: P001;} repetido \\
+\rowcolor{lblue}
+\textbf{Tipo correcto de dato}
+  & Los campos num\'ericos deben recibir n\'umeros y los campos de texto deben
+    recibir contenido compatible con su uso.
+  & \mv{Cantidad: "dos";} \\
+\rowcolor{lblue}
+\textbf{Asignaci\'on v\'alida}
+  & Al asignar un empleado a un pedido, el pedido debe existir y el empleado
+    debe haber aparecido antes en el programa.
+  & \mv{Asignar Empleado S001: Ana;} \\
+\rowcolor{lblue}
+\textbf{Uso v\'alido de identificadores}
+  & Los nombres usados en acciones y decisiones deben existir dentro del
+    an\'alisis y deben corresponder al contexto correcto.
+  & \mv{Si totalVenta: 10;} \\
+\rowcolor{lblue}
+\textbf{Secuencia de estados}
+  & Los cambios de estado deben seguir un orden l\'ogico dentro del pedido.
+  & \mv{Entregado P001;} al inicio \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Qu\'e no se valida en el an\'alisis sem\'antico}
+
+En esta fase no se revisan errores de escritura ni errores de forma. Esos
+problemas se detectan antes, en el an\'alisis l\'exico o en el an\'alisis
+sint\'actico.
+
+\begin{itemize}[leftmargin=1.5em]
+  \item errores de s\'imbolos no permitidos
+  \item cadenas sin cierre
+  \item punto y coma faltante
+  \item estructura incorrecta de una instrucci\'on
+\end{itemize}
+
+\textbf{Resumen claro:} el an\'alisis sem\'antico revisa coherencia. El
+an\'alisis l\'exico revisa s\'imbolos y palabras. El an\'alisis sint\'actico
+revisa estructura.
+
+\section{Lista de errores sem\'anticos que detectar\'a el compilador}
+
+En esta parte se definen los errores que el compilador debe reconocer durante
+el an\'alisis sem\'antico. Cada error representa una situaci\'on en la que el
+programa ya fue aceptado en su forma, pero falla en su coherencia interna.
+
+La idea de esta lista es dejar claro qu\'e problemas va a detectar el sistema,
+c\'omo se van a identificar y qu\'e tipo de mensaje debe mostrarse cuando uno de
+ellos aparezca.
+
+\renewcommand{\arraystretch}{1.4}
+\begin{table}[H]
+\centering
+\begin{tabular}{C{1.8cm} L{4.7cm} L{8.1cm}}
+\toprule
+\thead{C\'odigo} & \thead{Error} & \thead{Descripci\'on} \\
+\midrule
+\rowcolor{lgray}
+\textbf{\textcolor{red}{SEM-01}} & Pedido no creado
+  & Se intenta trabajar con un pedido que no ha sido registrado. \\
+\textbf{\textcolor{red}{SEM-02}} & Pedido repetido
+  & Se crea dos veces el mismo identificador de pedido. \\
+\rowcolor{lgray}
+\textbf{\textcolor{red}{SEM-03}} & Tipo de dato incorrecto
+  & El valor asignado no coincide con lo que el campo necesita guardar. \\
+\textbf{\textcolor{red}{SEM-04}} & Empleado no registrado
+  & Se intenta asignar un empleado que no aparece antes en el programa. \\
+\rowcolor{lgray}
+\textbf{\textcolor{red}{SEM-05}} & Identificador inv\'alido
+  & Se usa un nombre que no corresponde al contexto donde aparece. \\
+\textbf{\textcolor{red}{SEM-06}} & Secuencia de estado incorrecta
+  & El pedido cambia a un estado que no corresponde a su avance. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Flujo l\'ogico del an\'alisis sem\'antico}
+
+El an\'alisis sem\'antico debe seguir un orden claro y constante. El flujo
+propuesto para este proyecto es el siguiente:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item Recibir el resultado del an\'alisis sint\'actico.
+  \item Abrir una tabla de s\'imbolos vac\'ia.
+  \item Leer las instrucciones en el mismo orden en que aparecen.
+  \item Si aparece \mv{Crear Pedido}, verificar que el pedido no exista y luego
+        registrarlo.
+  \item Si aparece \mv{Empleado}, registrar el nombre para poder usarlo m\'as
+        adelante.
+  \item Si aparece un campo num\'erico, revisar que el valor sea compatible.
+  \item Si aparece \mv{Asignar Empleado}, comprobar que el pedido exista y que
+        el empleado ya est\'e registrado.
+  \item Si aparece un cambio de estado, comprobar que el pedido exista y que el
+        avance tenga sentido.
+  \item Si se detecta un error, detener el an\'alisis en ese momento.
+  \item Si el recorrido termina sin errores, aprobar el programa.
+\end{enumerate}
+
+\begin{lstlisting}[style=code]
+INICIO
+  |
+  v
+Recibir arbol sintactico
+  |
+  v
+Abrir tabla de simbolos vacia
+  |
+  v
+Leer la siguiente instruccion
+  |
+  +-- Crear Pedido      -> validar y registrar
+  +-- Empleado          -> registrar
+  +-- Campo numerico    -> validar valor
+  +-- Asignar Empleado  -> validar pedido y empleado
+  +-- Cambio de estado  -> validar pedido y secuencia
+  |
+  v
+Hay error
+  |
+  +-- Si -> detener analisis
+  +-- No -> continuar
+  |
+  v
+FIN SIN ERRORES
+\end{lstlisting}
+
+\section{Dise\~no de la tabla de s\'imbolos}
+
+La tabla de s\'imbolos debe guardar solo la informaci\'on que luego ser\'a usada
+para validar decisiones del programa. No es una copia completa del archivo, sino
+un registro interno de lo que el compilador necesita recordar.
+
+\renewcommand{\arraystretch}{1.4}
+\begin{table}[H]
+\centering
+\begin{tabular}{L{3.1cm} L{2.8cm} L{5.9cm} L{3.1cm}}
+\toprule
+\thead{Campo} & \thead{Tipo} & \thead{Uso} & \thead{Ejemplo} \\
+\midrule
+\rowcolor{lblue}
+\textbf{Identificador} & Texto
+  & Guarda el nombre principal del elemento registrado.
+  & \mv{P001} \\
+\rowcolor{lblue}
+\textbf{Clase} & Texto
+  & Indica si se trata de pedido, empleado o dato relevante.
+  & \mv{Pedido} \\
+\rowcolor{lblue}
+\textbf{Tipo} & Texto
+  & Indica la naturaleza del valor guardado.
+  & \mv{NUMERO\_REAL} \\
+\rowcolor{lblue}
+\textbf{Valor} & Variable
+  & Guarda el contenido asociado al registro.
+  & \mv{350.00} \\
+\rowcolor{lblue}
+\textbf{Estado} & Texto
+  & Muestra el avance actual cuando se trata de un pedido.
+  & \mv{Confirmado} \\
+\rowcolor{lblue}
+\textbf{L\'inea} & Entero
+  & Marca el lugar donde el dato fue registrado por primera vez.
+  & \mv{6} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Explicaci\'on de c\'omo se construye la tabla de s\'imbolos}
+
+\subsection*{Cu\'ando se agrega un identificador}
+
+Se agrega cuando el compilador encuentra un dato que luego podr\'a ser usado en
+otra parte del programa. En este lenguaje, eso ocurre de forma clara al crear
+un pedido o al registrar un empleado.
+
+\subsection*{Cu\'ando se actualiza}
+
+Se actualiza cuando el pedido cambia de estado. Por ejemplo, un pedido puede
+pasar de creado a confirmado, luego a procesando y despu\'es a entregado.
+
+\subsection*{Cu\'ando se valida}
+
+Se valida antes de ejecutar cualquier acci\'on importante. Esto ocurre cuando se
+quiere cambiar el estado de un pedido, asignar un empleado o aceptar un valor en
+un campo num\'erico.
+
+\subsection*{Cu\'ando se detiene el an\'alisis}
+
+El an\'alisis se detiene al encontrar el primer error sem\'antico. Esto permite
+mostrar con claridad el problema exacto y el momento en que aparece.
+
+\section{Construcci\'on de programa correcto}
+
+\subsection*{C\'odigo de entrada}
+
+\begin{lstlisting}[style=code]
+Empleado: Ana;
+Precio: 350.00;
+Crear Pedido: S001;
+Asignar Empleado S001: Ana;
+Confirmar S001;
+Procesando S001;
+Cobrar S001;
+Factura S001;
+\end{lstlisting}
+
+\subsection*{Construcci\'on paso a paso}
+
+\textbf{Paso 1}
+
+La instrucci\'on \mv{Empleado: Ana;} registra a \mv{Ana} para que pueda ser
+usada despu\'es.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{L{3cm} L{2.6cm} L{2.8cm} L{2.8cm} L{2.3cm} C{1cm}}
+\toprule
+\thead{Identificador} & \thead{Clase} & \thead{Tipo} & \thead{Valor} & \thead{Estado} & \thead{L\'inea} \\
+\midrule
+\rowcolor{rowhl}
+\mv{Ana} & \mv{Empleado} & \mv{IDENTIFICADOR} & \mv{Ana} & \mv{Registrado} & 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Paso 2}
+
+La instrucci\'on \mv{Precio: 350.00;} es aceptada porque el campo recibe un
+valor num\'erico v\'alido.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{L{3cm} L{2.6cm} L{2.8cm} L{2.8cm} L{2.3cm} C{1cm}}
+\toprule
+\thead{Identificador} & \thead{Clase} & \thead{Tipo} & \thead{Valor} & \thead{Estado} & \thead{L\'inea} \\
+\midrule
+\mv{Ana} & \mv{Empleado} & \mv{IDENTIFICADOR} & \mv{Ana} & \mv{Registrado} & 1 \\
+\rowcolor{rowhl}
+\mv{Precio} & \mv{Dato} & \mv{NUMERO\_REAL} & \mv{350.00} & \mv{Valido} & 2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Paso 3}
+
+La instrucci\'on \mv{Crear Pedido: S001;} agrega el pedido a la tabla.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{L{3cm} L{2.6cm} L{2.8cm} L{2.8cm} L{2.3cm} C{1cm}}
+\toprule
+\thead{Identificador} & \thead{Clase} & \thead{Tipo} & \thead{Valor} & \thead{Estado} & \thead{L\'inea} \\
+\midrule
+\mv{Ana} & \mv{Empleado} & \mv{IDENTIFICADOR} & \mv{Ana} & \mv{Registrado} & 1 \\
+\mv{Precio} & \mv{Dato} & \mv{NUMERO\_REAL} & \mv{350.00} & \mv{Valido} & 2 \\
+\rowcolor{rowhl}
+\mv{S001} & \mv{Pedido} & \mv{IDENTIFICADOR} & \mv{S001} & \mv{Creado} & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Paso 4}
+
+La instrucci\'on \mv{Asignar Empleado S001: Ana;} es v\'alida porque el pedido
+\mv{S001} existe y el empleado \mv{Ana} tambi\'en est\'a registrado.
+
+\textbf{Paso 5}
+
+Las instrucciones \mv{Confirmar S001;}, \mv{Procesando S001;},
+\mv{Cobrar S001;} y \mv{Factura S001;} actualizan el estado del pedido en orden.
+
+\vspace{6pt}
+{\color{green}\textbf{Resultado:}} el programa es coherente y el an\'alisis
+sem\'antico puede completarse sin errores.
+
+\section{Construcci\'on con error sem\'antico}
+
+\subsection*{C\'odigo de entrada}
+
+\begin{lstlisting}[style=code]
+Crear Pedido: S010;
+Asignar Empleado S010: Roberto;
+\end{lstlisting}
+
+\subsection*{Momento en que ocurre el error}
+
+La primera instrucci\'on crea correctamente el pedido \mv{S010}. El problema
+aparece en la segunda instrucci\'on, cuando se intenta asignar al empleado
+\mv{Roberto} sin haberlo registrado antes.
+
+\begin{lstlisting}[style=error]
+Error Semantico [SEM-04] -- Fila 2
+Empleado no registrado: Roberto
+No es posible asignar un empleado que no existe en el programa.
+Analisis detenido.
+\end{lstlisting}
+
+\subsection*{Por qu\'e ocurre}
+
+La acci\'on no tiene sentido dentro del lenguaje porque el compilador no puede
+usar un empleado que todav\'ia no forma parte del registro del programa. El
+error aparece exactamente al leer la instrucci\'on de asignaci\'on.
+
+\section{Entrega final}
+
+Para la siguiente etapa del proyecto, esta l\'ogica debe quedar implementada en
+el compilador con los siguientes elementos:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item integraci\'on con el analizador l\'exico
+  \item integraci\'on con el analizador sint\'actico
+  \item an\'alisis sem\'antico funcional
+  \item tabla de s\'imbolos construida autom\'aticamente
+  \item detecci\'on de errores sem\'anticos
+  \item salida clara del proceso
+\end{itemize}
+
+\end{document}

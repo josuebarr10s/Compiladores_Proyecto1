@@ -709,7 +709,7 @@ class CodeEditor(QPlainTextEdit):
 class AnalizadorApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Analizador Léxico — Compiladores")
+        self.setWindowTitle("Analizador Sintáctico — Compiladores")
         _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo-pedidos.png")
         if os.path.exists(_icon_path):
             self.setWindowIcon(QIcon(_icon_path))
@@ -763,7 +763,7 @@ class AnalizadorApp(QMainWindow):
             logo_label.setObjectName("titleIcon")
         lay.addWidget(logo_label)
         lay.addSpacing(12)
-        title = QLabel("ANALIZADOR  LÉXICO")
+        title = QLabel("ANALIZADOR  SINTÁCTICO")
         title.setObjectName("titleText")
         sub = QLabel("compiladores · lenguaje de pedidos")
         sub.setObjectName("titleSub")
@@ -926,6 +926,11 @@ class AnalizadorApp(QMainWindow):
         tree_toolbar_lay.setSpacing(8)
         tree_toolbar_lay.addWidget(QLabel("Vista del árbol").also(lambda l: l.setObjectName("treeToolbarTitle")))
         tree_toolbar_lay.addStretch()
+        self._tree_export_btn = QToolButton()
+        self._tree_export_btn.setObjectName("treeActionBtn")
+        self._tree_export_btn.setText("Guardar")
+        self._tree_export_btn.setToolTip("Guardar árbol en HTML")
+        self._tree_export_btn.clicked.connect(self._save_tree_html)
         self._tree_zoom_out_btn = QToolButton()
         self._tree_zoom_out_btn.setObjectName("treeZoomBtn")
         self._tree_zoom_out_btn.setText("-")
@@ -943,6 +948,7 @@ class AnalizadorApp(QMainWindow):
         self._tree_zoom_in_btn.setText("+")
         self._tree_zoom_in_btn.setToolTip("Acercar")
         self._tree_zoom_in_btn.clicked.connect(self._zoom_tree_in)
+        tree_toolbar_lay.addWidget(self._tree_export_btn)
         tree_toolbar_lay.addWidget(self._tree_zoom_out_btn)
         tree_toolbar_lay.addWidget(self._tree_zoom_label)
         tree_toolbar_lay.addWidget(self._tree_zoom_reset_btn)
@@ -1158,6 +1164,269 @@ class AnalizadorApp(QMainWindow):
         zoom = self._tree_canvas.zoom_percent()
         self._tree_zoom_label.setText(f"{zoom}%")
         self._tree_zoom_reset_btn.setText(f"{zoom}%")
+
+    def _save_tree_html(self):
+        if self._tree_canvas._raiz is None:
+            QMessageBox.warning(
+                self,
+                "Árbol no disponible",
+                "Primero analiza una entrada para generar el árbol sintáctico."
+            )
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar árbol en HTML",
+            "arbol_sintactico.html",
+            "Documento HTML (*.html)"
+        )
+        if not path:
+            return
+
+        if not path.lower().endswith(".html"):
+            path += ".html"
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self._build_tree_html(self._tree_canvas._raiz))
+            saved_name = path.replace("\\", "/").split("/")[-1]
+            self._status.showMessage(f"  ✔  Árbol guardado en HTML: {saved_name}")
+        except Exception:
+            QMessageBox.critical(
+                self,
+                "Error al guardar",
+                "No se pudo guardar el árbol sintáctico en HTML."
+            )
+
+    def _build_tree_html(self, raiz):
+        def esc(texto):
+            return (
+                str(texto)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;")
+            )
+
+        def render_node(nodo):
+            valor_html = ""
+            if nodo.valor is not None:
+                valor_html = f'<span class="node-value">{esc(nodo.valor)}</span>'
+
+            hijos_html = ""
+            if nodo.hijos:
+                hijos = "".join(render_node(hijo) for hijo in nodo.hijos)
+                hijos_html = f'<ul class="tree-children">{hijos}</ul>'
+
+            return (
+                '<li class="tree-item">'
+                f'<div class="node-card node-{esc(nodo.tipo)}">'
+                f'<div class="node-type">{esc(nodo.tipo)}</div>'
+                f'{valor_html}'
+                '</div>'
+                f'{hijos_html}'
+                '</li>'
+            )
+
+        tree_html = render_node(raiz)
+        return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Árbol Sintáctico</title>
+    <style>
+        :root {{
+            --bg: #0d1520;
+            --panel: #111d2e;
+            --panel-soft: #172438;
+            --line: #35506d;
+            --text: #ddeeff;
+            --muted: #88a7c5;
+            --accent: #99cbff;
+            --value: #ff8fab;
+            --shadow: rgba(0, 0, 0, 0.28);
+        }}
+
+        * {{
+            box-sizing: border-box;
+        }}
+
+        body {{
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(153, 203, 255, 0.12), transparent 30%),
+                linear-gradient(180deg, #0a1018 0%, var(--bg) 100%);
+        }}
+
+        .page {{
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px 24px 48px;
+        }}
+
+        .hero {{
+            margin-bottom: 28px;
+            padding: 24px 28px;
+            border: 1px solid rgba(153, 203, 255, 0.18);
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(17, 29, 46, 0.96), rgba(23, 36, 56, 0.92));
+            box-shadow: 0 20px 40px var(--shadow);
+        }}
+
+        .eyebrow {{
+            margin: 0 0 8px;
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }}
+
+        h1 {{
+            margin: 0 0 8px;
+            font-size: clamp(28px, 4vw, 42px);
+            line-height: 1.1;
+        }}
+
+        .subtitle {{
+            margin: 0;
+            color: var(--muted);
+            font-size: 15px;
+        }}
+
+        .tree-shell {{
+            overflow: auto;
+            padding: 24px;
+            border-radius: 20px;
+            border: 1px solid rgba(153, 203, 255, 0.16);
+            background: rgba(17, 29, 46, 0.88);
+            box-shadow: 0 18px 36px var(--shadow);
+        }}
+
+        .tree,
+        .tree ul {{
+            margin: 0;
+            padding-left: 28px;
+            list-style: none;
+            position: relative;
+        }}
+
+        .tree {{
+            padding-left: 0;
+        }}
+
+        .tree ul::before {{
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 14px;
+            left: 12px;
+            width: 2px;
+            background: linear-gradient(180deg, rgba(103, 232, 249, 0.4), rgba(53, 80, 109, 0.1));
+        }}
+
+        .tree-item {{
+            position: relative;
+            margin: 14px 0;
+            padding-left: 28px;
+        }}
+
+        .tree-item::before {{
+            content: "";
+            position: absolute;
+            top: 28px;
+            left: 12px;
+            width: 16px;
+            height: 2px;
+            background: rgba(103, 232, 249, 0.4);
+        }}
+
+        .node-card {{
+            display: inline-flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 220px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(153, 203, 255, 0.2);
+            background: linear-gradient(180deg, rgba(23, 36, 56, 0.98), rgba(13, 21, 32, 0.98));
+            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
+        }}
+
+        .node-type {{
+            color: var(--accent);
+            font-family: Consolas, "Cascadia Code", monospace;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }}
+
+        .node-value {{
+            display: inline-block;
+            color: var(--value);
+            font-family: Consolas, "Cascadia Code", monospace;
+            font-size: 14px;
+            background: rgba(255, 143, 171, 0.12);
+            border: 1px solid rgba(255, 143, 171, 0.2);
+            border-radius: 10px;
+            padding: 6px 10px;
+            word-break: break-word;
+        }}
+
+        .node-PROGRAMA {{
+            border-color: rgba(153, 203, 255, 0.4);
+        }}
+
+        .node-LISTA_SENTENCIAS {{
+            border-color: rgba(103, 232, 249, 0.35);
+        }}
+
+        .node-DECLARACION_BASICA,
+        .node-ACCION_COMPUESTA,
+        .node-ACCION_ESTADO,
+        .node-ESTRUCTURA_CONDICIONAL,
+        .node-CONDICION {{
+            background: linear-gradient(180deg, rgba(24, 30, 54, 0.98), rgba(13, 21, 32, 0.98));
+        }}
+
+        @media (max-width: 768px) {{
+            .page {{
+                padding: 20px 14px 32px;
+            }}
+
+            .hero,
+            .tree-shell {{
+                padding: 18px;
+                border-radius: 16px;
+            }}
+
+            .node-card {{
+                min-width: 0;
+                width: 100%;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <main class="page">
+        <section class="hero">
+            <p class="eyebrow">Compiladores</p>
+            <h1>Árbol Sintáctico</h1>
+            <p class="subtitle"></p>
+        </section>
+        <section class="tree-shell">
+            <ul class="tree">
+                {tree_html}
+            </ul>
+        </section>
+    </main>
+</body>
+</html>
+"""
 
     def _apply_results_table_font(self):
         table_font = QFont("Consolas")
@@ -1539,6 +1808,20 @@ class AnalizadorApp(QMainWindow):
             color: {C["teal"]};
             border-color: {C["teal"]};
             background-color: rgba(12,227,232,0.10);
+        }}
+        QToolButton#treeActionBtn {{
+            background-color: {C["bg_light"]};
+            color: {C["green"]};
+            border: 1px solid {C["green"]}55;
+            border-radius: 8px;
+            padding: 4px 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }}
+        QToolButton#treeActionBtn:hover {{
+            color: {C["green"]};
+            border-color: {C["green"]};
+            background-color: {C["green"]}22;
         }}
         """)
 

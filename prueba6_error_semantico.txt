@@ -1,0 +1,19 @@
+// =============================================
+// PRUEBA 6 — Error semantico intencional
+// =============================================
+
+Empresa: "Pedidos Express";
+
+// Se crea correctamente el pedido
+Crear Pedido: E001;
+
+// ERROR SEMANTICO ESPERADO:
+// SEM-04 — Repartidor no registrado
+// Diego no fue registrado antes con Repartidor: Diego;
+Asignar Repartidor E001: Diego;
+
+// Estas instrucciones ya no deberian analizarse semanticamente
+// porque el analisis se detiene al primer error semantico.
+Confirmar E001;
+Procesando E001;
+Entregado E001;

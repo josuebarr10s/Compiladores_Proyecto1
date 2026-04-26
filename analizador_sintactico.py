@@ -10,10 +10,10 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit, QTextEdit, QScrollArea, QToolButton,
 )
 from PyQt6.QtGui import (
-    QFont, QColor, QTextCharFormat, QSyntaxHighlighter,
+    QFont, QColor, QTextCharFormat, QSyntaxHighlighter, QTextCursor,
     QPainter, QTextFormat, QFontMetricsF, QLinearGradient, QBrush, QPixmap, QIcon, QPen,
 )
-from PyQt6.QtCore import Qt, QRect, QSize, QPointF
+from PyQt6.QtCore import Qt, QRect, QSize, QPointF, QTimer
 
 C = {
     "bg_deep":    "#0d1520",
@@ -169,6 +169,275 @@ class ErrorSintactico(Exception):
         super().__init__(mensaje)
         self.fila = fila
         self.col  = col
+
+
+class ErrorSemantico(Exception):
+    def __init__(self, codigo, titulo, mensaje, fila, col):
+        super().__init__(mensaje)
+        self.codigo = codigo
+        self.titulo = titulo
+        self.mensaje = mensaje
+        self.fila = fila
+        self.col = col
+
+    def como_tupla(self):
+        return (self.codigo, self.titulo, self.mensaje, self.fila, self.col)
+
+
+class Simbolo:
+    def __init__(self, identificador, clase, tipo, valor, estado, linea):
+        self.identificador = identificador
+        self.clase = clase
+        self.tipo = tipo
+        self.valor = valor
+        self.estado = estado
+        self.linea = linea
+
+    def como_fila(self):
+        return {
+            "identificador": self.identificador,
+            "clase": self.clase,
+            "tipo": self.tipo,
+            "valor": self.valor,
+            "estado": self.estado,
+            "linea": self.linea,
+        }
+
+
+class AnalizadorSemantico:
+    CAMPOS_NUMERICOS = {
+        "Cantidad", "Precio", "Subtotal", "Descuento", "Impuesto", "Total",
+        "Stock", "Minimo", "Maximo", "Reservado", "Saldo", "Credito",
+    }
+
+    CAMPOS_TEXTO = {
+        "Empresa", "Sucursal", "Cliente", "Proveedor", "Empleado",
+        "Repartidor", "Producto", "Telefono", "Direccion", "Referencia",
+        "Categoria", "Nota", "Fecha", "Descripcion",
+    }
+
+    ENTIDADES_REGISTRABLES = {"Empleado", "Repartidor", "Cliente", "Proveedor"}
+
+    ESTADO_NORMALIZADO = {
+        "Confirmar": "Confirmado",
+        "Procesando": "Procesando",
+        "EnRuta": "EnRuta",
+        "Entregado": "Entregado",
+        "Cobrar": "Cobrado",
+        "Factura": "Facturado",
+        "Listo": "Listo",
+        "Recibido": "Recibido",
+        "Cancelado": "Cancelado",
+        "Pendiente": "Pendiente",
+        "Aprobado": "Aprobado",
+        "Rechazado": "Rechazado",
+    }
+
+    TRANSICIONES_PEDIDO = {
+        "Creado": {"Confirmado", "Procesando", "Cancelado", "Pendiente", "Aprobado", "Rechazado"},
+        "Pendiente": {"Confirmado", "Aprobado", "Rechazado", "Cancelado"},
+        "Aprobado": {"Confirmado", "Procesando", "Cancelado"},
+        "Confirmado": {"Procesando", "Listo", "EnRuta", "Cobrado", "Facturado", "Cancelado"},
+        "Procesando": {"Listo", "EnRuta", "Entregado", "Cobrado", "Facturado", "Cancelado"},
+        "Listo": {"EnRuta", "Entregado", "Cobrado", "Facturado", "Recibido", "Cancelado"},
+        "EnRuta": {"Entregado", "Recibido", "Cancelado"},
+        "Entregado": {"Recibido", "Cobrado", "Facturado"},
+        "Cobrado": {"Facturado", "Listo", "EnRuta", "Entregado", "Recibido"},
+        "Facturado": {"Listo", "EnRuta", "Entregado", "Recibido"},
+        "Recibido": set(),
+        "Cancelado": set(),
+        "Rechazado": set(),
+    }
+
+    ESTADOS_NO_PEDIDO = {"Disponible", "Inactivo", "Agotado"}
+
+    def __init__(self, tokens):
+        self._tokens = [t for t in tokens if t[1] != "ERROR_LEXICO"]
+        self._pos = 0
+        self.tabla_simbolos = {}
+        self.errores = []
+
+    def analizar(self):
+        try:
+            while not self._es_fin():
+                self._sentencia()
+        except ErrorSemantico as e:
+            self.errores.append(e.como_tupla())
+        return list(self.tabla_simbolos.values()), self.errores
+
+    def _actual(self):
+        if self._pos < len(self._tokens):
+            return self._tokens[self._pos]
+        return ("EOF", "EOF", 0, 0)
+
+    def _lexema(self): return self._actual()[0]
+    def _tipo(self): return self._actual()[1]
+    def _fila(self): return self._actual()[2]
+    def _col(self): return self._actual()[3]
+    def _es_fin(self): return self._pos >= len(self._tokens)
+
+    def _avanzar(self):
+        tok = self._actual()
+        self._pos += 1
+        return tok
+
+    def _saltar_hasta_fin_sentencia(self):
+        while not self._es_fin() and self._lexema() != ";":
+            self._avanzar()
+        if not self._es_fin():
+            self._avanzar()
+
+    def _sentencia(self):
+        lex = self._lexema()
+        if lex == "Crear":
+            return self._crear_pedido()
+        if lex == "Asignar":
+            return self._asignar()
+        if lex == "Si":
+            return self._condicion()
+        if lex in VERBOS_ESTADO:
+            return self._cambio_estado()
+        if lex in PALABRAS_CLAVE_BASICA:
+            return self._declaracion_o_dato()
+        self._saltar_hasta_fin_sentencia()
+
+    def _declaracion_o_dato(self):
+        campo = self._avanzar()
+        if self._lexema() != ":":
+            self._saltar_hasta_fin_sentencia()
+            return
+        self._avanzar()
+        valor = self._actual()
+
+        if campo[0] in self.CAMPOS_NUMERICOS:
+            if valor[1] not in ("NUMERO", "NUMERO_REAL"):
+                self._error("SEM-03", "Tipo de dato incorrecto",
+                            f"El campo {campo[0]} necesita un valor numerico.",
+                            valor)
+            tipo = valor[1]
+            self._registrar_o_actualizar(campo[0], "Dato", tipo, valor[0], "Valido", campo[2])
+
+        elif campo[0] in self.CAMPOS_TEXTO:
+            if valor[1] not in ("IDENTIFICADOR", "CADENA_TEXTO"):
+                self._error("SEM-03", "Tipo de dato incorrecto",
+                            f"El campo {campo[0]} necesita texto o identificador.",
+                            valor)
+            if campo[0] in self.ENTIDADES_REGISTRABLES and valor[1] == "IDENTIFICADOR":
+                self._registrar_o_actualizar(valor[0], campo[0], "IDENTIFICADOR", valor[0], "Registrado", campo[2])
+
+        self._saltar_hasta_fin_sentencia()
+
+    def _crear_pedido(self):
+        crear = self._avanzar()
+        if self._lexema() != "Pedido":
+            self._saltar_hasta_fin_sentencia()
+            return
+        self._avanzar()
+        if self._lexema() == ":":
+            self._avanzar()
+        pedido = self._actual()
+        if pedido[0] in self.tabla_simbolos and self.tabla_simbolos[pedido[0]].clase == "Pedido":
+            self._error("SEM-02", "Pedido repetido",
+                        f"El pedido {pedido[0]} ya fue creado en la linea {self.tabla_simbolos[pedido[0]].linea}.",
+                        pedido)
+        self._registrar_o_actualizar(pedido[0], "Pedido", "IDENTIFICADOR", pedido[0], "Creado", crear[2])
+        self._saltar_hasta_fin_sentencia()
+
+    def _asignar(self):
+        self._avanzar()
+        entidad = self._actual()
+        self._avanzar()
+        pedido = self._actual()
+        if not self._existe_clase(pedido[0], "Pedido"):
+            self._error("SEM-01", "Pedido no creado",
+                        f"No se puede asignar {entidad[0]} al pedido {pedido[0]} porque no ha sido creado.",
+                        pedido)
+        self._avanzar()
+        if self._lexema() == ":":
+            self._avanzar()
+        asignado = self._actual()
+        if not self._existe_clase(asignado[0], entidad[0]):
+            self._error("SEM-04", f"{entidad[0]} no registrado",
+                        f"{entidad[0]} no registrado: {asignado[0]}",
+                        asignado)
+        self._saltar_hasta_fin_sentencia()
+
+    def _cambio_estado(self):
+        verbo = self._avanzar()
+        ident = self._actual()
+
+        if verbo[0] in self.ESTADOS_NO_PEDIDO:
+            if ident[0] not in self.tabla_simbolos:
+                self._error("SEM-05", "Identificador invalido",
+                            f"El identificador {ident[0]} no existe para cambiarlo a {verbo[0]}.",
+                            ident)
+            self.tabla_simbolos[ident[0]].estado = verbo[0]
+            self._saltar_hasta_fin_sentencia()
+            return
+
+        if not self._existe_clase(ident[0], "Pedido"):
+            self._error("SEM-01", "Pedido no creado",
+                        f"No se puede aplicar {verbo[0]} al pedido {ident[0]} porque no ha sido creado.",
+                        ident)
+
+        pedido = self.tabla_simbolos[ident[0]]
+        nuevo_estado = self.ESTADO_NORMALIZADO.get(verbo[0], verbo[0])
+        permitidos = self.TRANSICIONES_PEDIDO.get(pedido.estado, set())
+        if nuevo_estado not in permitidos:
+            self._error("SEM-06", "Secuencia de estado incorrecta",
+                        f"El pedido {ident[0]} no puede pasar de {pedido.estado} a {nuevo_estado}.",
+                        verbo)
+        pedido.estado = nuevo_estado
+        self._saltar_hasta_fin_sentencia()
+
+    def _condicion(self):
+        self._avanzar()
+        ident = self._actual()
+        if ident[0] not in self.tabla_simbolos:
+            self._error("SEM-05", "Identificador invalido",
+                        f"El identificador {ident[0]} no existe para usarse en una condicion.",
+                        ident)
+        self._saltar_hasta_fin_sentencia()
+
+    def _registrar_o_actualizar(self, identificador, clase, tipo, valor, estado, linea):
+        if identificador in self.tabla_simbolos and self.tabla_simbolos[identificador].clase == clase:
+            simbolo = self.tabla_simbolos[identificador]
+            simbolo.tipo = tipo
+            simbolo.valor = valor
+            simbolo.estado = estado
+        else:
+            self.tabla_simbolos[identificador] = Simbolo(identificador, clase, tipo, valor, estado, linea)
+
+    def _existe_clase(self, identificador, clase):
+        return identificador in self.tabla_simbolos and self.tabla_simbolos[identificador].clase == clase
+
+    def _error(self, codigo, titulo, mensaje, tok):
+        raise ErrorSemantico(codigo, titulo, mensaje, tok[2], tok[3])
+
+
+def analizar_backend(codigo):
+    app_proxy = AnalizadorApp.__new__(AnalizadorApp)
+    tokens, lex_errors = AnalizadorApp._run_lexer(app_proxy, codigo)
+    arbol = None
+    syn_errors = []
+    tabla_simbolos = []
+    sem_errors = []
+
+    if not lex_errors:
+        parser = AnalizadorSintactico(tokens)
+        arbol, syn_errors = parser.parsear()
+        if not syn_errors:
+            sem = AnalizadorSemantico(tokens)
+            tabla_simbolos, sem_errors = sem.analizar()
+
+    return {
+        "tokens": tokens,
+        "errores_lexicos": lex_errors,
+        "arbol": arbol,
+        "errores_sintacticos": syn_errors,
+        "tabla_simbolos": [s.como_fila() for s in tabla_simbolos],
+        "errores_semanticos": sem_errors,
+    }
 
 
 class AnalizadorSintactico:
@@ -594,6 +863,7 @@ class CodeEditor(QPlainTextEdit):
         font = QFont(self._font_family, self._font_size)
         if not font.exactMatch():
             self._font_family = "Consolas"
+        self._diagnostics = []
         self._apply_editor_font()
         self._updateLineNumberAreaWidth(0)
         self._highlightCurrentLine()
@@ -663,6 +933,13 @@ class CodeEditor(QPlainTextEdit):
             return
         super().wheelEvent(event)
 
+    def set_diagnostics(self, diagnostics):
+        self._diagnostics = diagnostics
+        self._highlightCurrentLine()
+
+    def clear_diagnostics(self):
+        self.set_diagnostics([])
+
     def _highlightCurrentLine(self):
         selections = []
         if not self.isReadOnly():
@@ -672,6 +949,24 @@ class CodeEditor(QPlainTextEdit):
             sel.cursor = self.textCursor()
             sel.cursor.clearSelection()
             selections.append(sel)
+
+        for diag in self._diagnostics:
+            block = self.document().findBlockByNumber(max(0, diag["fila"] - 1))
+            if not block.isValid():
+                continue
+            cursor = QTextCursor(block)
+            start = block.position() + max(0, diag["col"] - 1)
+            end = min(start + max(1, diag.get("longitud", 1)), block.position() + block.length() - 1)
+            cursor.setPosition(start)
+            cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+
+            sel = QTextEdit.ExtraSelection()
+            sel.cursor = cursor
+            sel.format.setUnderlineStyle(QTextCharFormat.UnderlineStyle.SpellCheckUnderline)
+            sel.format.setUnderlineColor(QColor(diag.get("color", C["red"])))
+            sel.format.setToolTip(diag.get("mensaje", ""))
+            selections.append(sel)
+
         self.setExtraSelections(selections)
 
     def lineNumberAreaPaintEvent(self, event):
@@ -709,7 +1004,7 @@ class CodeEditor(QPlainTextEdit):
 class AnalizadorApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Analizador Sintáctico — Compiladores")
+        self.setWindowTitle("Analizador Léxico, Sintáctico y Semántico — Compiladores")
         _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo-pedidos.png")
         if os.path.exists(_icon_path):
             self.setWindowIcon(QIcon(_icon_path))
@@ -720,6 +1015,11 @@ class AnalizadorApp(QMainWindow):
         self._results_font_max = 20
         self._build_ui()
         self._apply_styles()
+        self._live_timer = QTimer(self)
+        self._live_timer.setSingleShot(True)
+        self._live_timer.setInterval(550)
+        self._live_timer.timeout.connect(self._run_live_analysis)
+        self._editor.textChanged.connect(self._schedule_live_analysis)
 
     def _build_ui(self):
         central = QWidget()
@@ -763,7 +1063,7 @@ class AnalizadorApp(QMainWindow):
             logo_label.setObjectName("titleIcon")
         lay.addWidget(logo_label)
         lay.addSpacing(12)
-        title = QLabel("ANALIZADOR  SINTÁCTICO")
+        title = QLabel("ANALIZADOR  LÉXICO · SINTÁCTICO · SEMÁNTICO")
         title.setObjectName("titleText")
         sub = QLabel("compiladores · lenguaje de pedidos")
         sub.setObjectName("titleSub")
@@ -963,6 +1263,16 @@ class AnalizadorApp(QMainWindow):
         self._synerr_table = self._make_table(["#", "Descripción del Error", "Fila", "Col"])
         self._tabs.addTab(self._synerr_table, "  ⛔  Errores Sintácticos  ")
 
+        self._symbol_table = self._make_table([
+            "#", "Identificador", "Clase", "Tipo", "Valor", "Estado", "Línea"
+        ])
+        self._tabs.addTab(self._symbol_table, "  📋  Tabla de Símbolos  ")
+
+        self._semerr_table = self._make_table([
+            "#", "Código", "Error", "Descripción", "Fila", "Col"
+        ])
+        self._tabs.addTab(self._semerr_table, "  ⚠  Errores Semánticos  ")
+
         self._apply_results_table_font()
         self._update_results_zoom_label()
         lay.addWidget(self._tabs, stretch=1)
@@ -996,55 +1306,144 @@ class AnalizadorApp(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error al cargar", str(e))
 
+    def _schedule_live_analysis(self):
+        self._live_timer.start()
+
+    def _run_live_analysis(self):
+        self._perform_analysis(auto=True)
+
     def _analyze(self):
+        self._perform_analysis(auto=False)
+
+    def _perform_analysis(self, auto=False):
         code = self._editor.toPlainText()
         if not code.strip():
-            QMessageBox.warning(self, "Editor vacío",
-                                "Ingresa código o carga un archivo .txt primero.")
+            self._clear_analysis_outputs()
+            if not auto:
+                QMessageBox.warning(self, "Editor vacío",
+                                    "Ingresa código o carga un archivo .txt primero.")
             return
 
         tokens, lex_errors = self._run_lexer(code)
         self._fill_token_table(tokens)
         self._fill_error_table(lex_errors)
 
+        syn_errors = []
+        sem_errors = []
+        tabla_simbolos = []
+
         if not lex_errors:
             parser = AnalizadorSintactico(tokens)
             arbol, syn_errors = parser.parsear()
             self._fill_tree(arbol)
             self._fill_synerr_table(syn_errors)
-            if syn_errors:
-                self._tabs.setCurrentIndex(3)
+
+            if not syn_errors:
+                semantico = AnalizadorSemantico(tokens)
+                tabla_simbolos, sem_errors = semantico.analizar()
+                self._fill_symbol_table(tabla_simbolos)
+                self._fill_semerr_table(sem_errors)
+                if not auto:
+                    self._tabs.setCurrentIndex(5 if sem_errors else 4)
             else:
-                self._tabs.setCurrentIndex(2)
+                self._symbol_table.setRowCount(0)
+                self._semerr_table.setRowCount(0)
+                if not auto:
+                    self._tabs.setCurrentIndex(3)
+
             syn_msg = f", {len(syn_errors)} errores sintácticos" if syn_errors else ", sintaxis correcta ✔"
+            sem_msg = f", {len(sem_errors)} errores semánticos" if sem_errors else (", semántica correcta ✔" if not syn_errors else "")
         else:
             self._tree_canvas.clear_tree()
             self._update_tree_zoom_label()
             self._synerr_table.setRowCount(0)
-            self._tabs.setCurrentIndex(1)
+            self._symbol_table.setRowCount(0)
+            self._semerr_table.setRowCount(0)
+            if not auto:
+                self._tabs.setCurrentIndex(1)
             syn_msg = ""
+            sem_msg = ""
 
+        diagnostics = self._build_editor_diagnostics(code, lex_errors, syn_errors, sem_errors)
+        self._editor.set_diagnostics(diagnostics)
+
+        total_errors = len(lex_errors) + len(syn_errors) + len(sem_errors)
         self._badge_tokens.setText(f"Tokens: {len(tokens)}")
-        self._badge_errors.setText(f"Errores: {len(lex_errors)}")
-        self._update_status(len(tokens), len(lex_errors))
-        icon = "⚠" if lex_errors else "✔"
+        self._badge_errors.setText(f"Errores: {total_errors}")
+        self._update_status(len(tokens), total_errors)
+        icon = "⚠" if total_errors else "✔"
+        mode = "IDE" if auto else "Análisis"
         self._status.showMessage(
-            f"  {icon}  Léxico: {len(tokens)} tokens, {len(lex_errors)} errores{syn_msg}"
+            f"  {icon}  {mode}: {len(tokens)} tokens, {len(lex_errors)} errores léxicos{syn_msg}{sem_msg}"
         )
 
-    def _clear(self):
-        self._editor.clear()
+    def _clear_analysis_outputs(self):
         self._token_table.setRowCount(0)
         self._error_table.setRowCount(0)
         self._tree_canvas.clear_tree()
         self._update_tree_zoom_label()
         self._synerr_table.setRowCount(0)
-        self._filename = "sin_titulo.txt"
-        self._tab_label.setText(f"  📄 {self._filename}  ")
+        self._symbol_table.setRowCount(0)
+        self._semerr_table.setRowCount(0)
+        self._editor.clear_diagnostics()
         self._badge_tokens.setText("Tokens: 0")
         self._badge_errors.setText("Errores: 0")
+        self._update_status(0, 0)
+
+    def _build_editor_diagnostics(self, code, lex_errors, syn_errors, sem_errors):
+        lineas = code.split("\n")
+        diagnostics = []
+
+        for lexema, tipo, fila, col, desc in lex_errors:
+            diagnostics.append({
+                "fila": fila,
+                "col": col,
+                "longitud": max(1, len(lexema)),
+                "color": C["red"],
+                "mensaje": f"Léxico: {desc}",
+            })
+
+        for desc, fila, col in syn_errors:
+            diagnostics.append({
+                "fila": fila,
+                "col": col,
+                "longitud": self._diagnostic_word_length(lineas, fila, col),
+                "color": C["amber"],
+                "mensaje": f"Sintáctico: {desc}",
+            })
+
+        for codigo, titulo, mensaje, fila, col in sem_errors:
+            diagnostics.append({
+                "fila": fila,
+                "col": col,
+                "longitud": self._diagnostic_word_length(lineas, fila, col),
+                "color": C["purple"],
+                "mensaje": f"Semántico {codigo}: {titulo} — {mensaje}",
+            })
+
+        return diagnostics
+
+    def _diagnostic_word_length(self, lineas, fila, col):
+        if fila < 1 or fila > len(lineas):
+            return 1
+        linea = lineas[fila - 1]
+        i = max(0, min(len(linea), col - 1))
+        if i >= len(linea):
+            return 1
+        if not linea[i].isalnum() and linea[i] != "_":
+            return 1
+        j = i
+        while j < len(linea) and (linea[j].isalnum() or linea[j] == "_"):
+            j += 1
+        return max(1, j - i)
+
+    def _clear(self):
+        self._live_timer.stop()
+        self._editor.clear()
+        self._clear_analysis_outputs()
+        self._filename = "sin_titulo.txt"
+        self._tab_label.setText(f"  📄 {self._filename}  ")
         self._status.showMessage("  ⬡  Listo para analizar")
-        self._update_status()
 
     def _update_status(self, token_count=None, error_count=None):
         cursor = self._editor.textCursor()
@@ -1159,6 +1558,37 @@ class AnalizadorApp(QMainWindow):
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 item.setForeground(QColor(C["amber"]))
                 self._synerr_table.setItem(r, c, item)
+
+    def _fill_symbol_table(self, simbolos):
+        self._symbol_table.setRowCount(0)
+        for idx, simbolo in enumerate(simbolos, start=1):
+            r = self._symbol_table.rowCount()
+            self._symbol_table.insertRow(r)
+            valores = [
+                idx,
+                simbolo.identificador,
+                simbolo.clase,
+                simbolo.tipo,
+                simbolo.valor,
+                simbolo.estado,
+                simbolo.linea,
+            ]
+            for c, val in enumerate(valores):
+                item = QTableWidgetItem(str(val))
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                item.setForeground(QColor(C["green"] if simbolo.clase == "Pedido" else C["blue"]))
+                self._symbol_table.setItem(r, c, item)
+
+    def _fill_semerr_table(self, sem_errors):
+        self._semerr_table.setRowCount(0)
+        for idx, (codigo, titulo, mensaje, fila, col) in enumerate(sem_errors, start=1):
+            r = self._semerr_table.rowCount()
+            self._semerr_table.insertRow(r)
+            for c, val in enumerate([idx, codigo, titulo, mensaje, fila, col]):
+                item = QTableWidgetItem(str(val))
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                item.setForeground(QColor(C["red"]))
+                self._semerr_table.setItem(r, c, item)
 
     def _update_tree_zoom_label(self):
         zoom = self._tree_canvas.zoom_percent()
@@ -1435,7 +1865,10 @@ class AnalizadorApp(QMainWindow):
         header_font.setPointSizeF(max(10, self._results_font_size - 1))
         row_height = QFontMetricsF(table_font).height() + 10
         header_height = int(QFontMetricsF(header_font).height() + 14)
-        for table in (self._token_table, self._error_table, self._synerr_table):
+        for table in (
+            self._token_table, self._error_table, self._synerr_table,
+            self._symbol_table, self._semerr_table
+        ):
             table.setFont(table_font)
             table.horizontalHeader().setFont(header_font)
             table.verticalHeader().setDefaultSectionSize(int(row_height))

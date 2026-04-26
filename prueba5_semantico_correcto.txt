@@ -1,0 +1,30 @@
+// =============================================
+// PRUEBA 5 — Programa semanticamente correcto
+// =============================================
+
+Empresa: "Tech Delivery";
+Sucursal: "Zona 10";
+
+// Registro previo del empleado
+Empleado: Laura;
+Categoria: "Soporte Tecnico";
+Disponible Laura;
+
+// Datos numericos validos
+Precio: 450.00;
+Cantidad: 1;
+Subtotal: 450.00;
+Descuento: 0;
+Impuesto: 54.00;
+Total: 504.00;
+
+// Creacion y flujo correcto del pedido
+Crear Pedido: T001;
+Asignar Empleado T001: Laura;
+Confirmar T001;
+Procesando T001;
+Listo T001;
+Cobrar T001;
+Factura T001;
+Entregado T001;
+Recibido T001;

@@ -1111,7 +1111,7 @@ class AnalizadorApp(QMainWindow):
         for icon, tip, fn, obj in [
             ("📂", "Abrir archivo .txt", self._open_file, "btnOpen"),
             ("▶",  "Analizar código",    self._analyze,   "btnRun"),
-            ("☀",  "Activar modo claro", self._toggle_dark_mode, "btnTheme"),
+            ("",   "Activar modo claro", self._toggle_dark_mode, "btnTheme"),
             ("✕",  "Limpiar todo",       self._clear,     "btnClear"),
         ]:
             btn = QPushButton(icon)
@@ -1121,6 +1121,10 @@ class AnalizadorApp(QMainWindow):
             btn.clicked.connect(fn)
             if obj == "btnTheme":
                 self._theme_btn = btn
+                icon_name = "Sol.png" if self._dark_mode else "luna.png"
+                icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), icon_name)
+                self._theme_btn.setIcon(QIcon(icon_path))
+                self._theme_btn.setIconSize(QSize(20, 20))
             lay.addWidget(btn)
         lay.addStretch()
         lbl = QLabel("LX")
@@ -1241,6 +1245,8 @@ class AnalizadorApp(QMainWindow):
         _base = os.path.dirname(os.path.abspath(__file__))
         _icon_tokens = QIcon(os.path.join(_base, "cadena-de-bloques.png"))
         _icon_errors = QIcon(os.path.join(_base, "cancelar.png"))
+        _icon_tree = QIcon(os.path.join(_base, "arbol.png"))
+        _icon_table = QIcon(os.path.join(_base, "tabla.png"))
         self._tabs.addTab(self._token_table, _icon_tokens, "  Análisis Léxico  ")
         self._tabs.addTab(self._error_table, _icon_errors, "  Error Léxico  ")
 
@@ -1288,7 +1294,7 @@ class AnalizadorApp(QMainWindow):
         self._tree_scroll.setObjectName("treeScroll")
         tree_lay.addWidget(tree_toolbar)
         tree_lay.addWidget(self._tree_scroll, stretch=1)
-        self._tabs.addTab(tree_tab, "  🌲  Árbol Sintáctico  ")
+        self._tabs.addTab(tree_tab, _icon_tree, "  Árbol Sintáctico  ")
 
         self._synerr_table = self._make_table(["#", "Descripción del Error", "Fila", "Col"])
         self._tabs.addTab(self._synerr_table, _icon_errors, "  Errores Sintácticos  ")
@@ -1296,7 +1302,7 @@ class AnalizadorApp(QMainWindow):
         self._symbol_table = self._make_table([
             "#", "Identificador", "Clase", "Tipo", "Valor", "Estado", "Línea"
         ])
-        self._tabs.addTab(self._symbol_table, "  📋  Tabla de Símbolos  ")
+        self._tabs.addTab(self._symbol_table, _icon_table, "  Tabla de Símbolos  ")
 
         self._semerr_table = self._make_table([
             "#", "Código", "Error", "Descripción", "Fila", "Col"
@@ -1326,7 +1332,11 @@ class AnalizadorApp(QMainWindow):
         C.clear()
         C.update(DARK_THEME if self._dark_mode else LIGHT_THEME)
 
-        self._theme_btn.setText("☀" if self._dark_mode else "🌙")
+        icon_name = "Sol.png" if self._dark_mode else "luna.png"
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), icon_name)
+        self._theme_btn.setIcon(QIcon(icon_path))
+        self._theme_btn.setIconSize(QSize(20, 20))
+        self._theme_btn.setText("")
         self._theme_btn.setToolTip("Activar modo claro" if self._dark_mode else "Activar modo oscuro")
 
         self._apply_styles()

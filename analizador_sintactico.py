@@ -37,6 +37,30 @@ C = {
     "line_cur":   "#162030",
 }
 
+DARK_THEME = C.copy()
+
+LIGHT_THEME = {
+    "bg_deep":    "#f5f8fc",
+    "bg_mid":     "#e8eef7",
+    "bg_light":   "#ffffff",
+    "bg_row_alt": "#eef4fb",
+    "teal":       "#2563eb",
+    "teal_dim":   "#3b82f6",
+    "teal_glow":  "#60a5fa",
+    "purple":     "#7c3aed",
+    "pink":       "#db2777",
+    "amber":      "#b45309",
+    "green":      "#0284c7",
+    "blue":       "#1d4ed8",
+    "cyan":       "#0891b2",
+    "red":        "#dc2626",
+    "comment":    "#64748b",
+    "text":       "#102033",
+    "text_dim":   "#64748b",
+    "border":     "#cbd5e1",
+    "line_cur":   "#eaf2ff",
+}
+
 PALABRAS_RESERVADAS = (
     "Cliente", "Pedido", "Producto", "Repartidor", "Proveedor",
     "Empleado", "Empresa", "Sucursal",
@@ -1004,7 +1028,7 @@ class CodeEditor(QPlainTextEdit):
 class AnalizadorApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Analizador Léxico, Sintáctico y Semántico — Compiladores")
+        self.setWindowTitle("Compilador Pedidos")
         _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo-pedidos.png")
         if os.path.exists(_icon_path):
             self.setWindowIcon(QIcon(_icon_path))
@@ -1013,6 +1037,9 @@ class AnalizadorApp(QMainWindow):
         self._results_font_size = 10.2
         self._results_font_min = 9
         self._results_font_max = 20
+        self._dark_mode = True
+        self._last_error_signatures = []
+        self._active_error_signature = None
         self._build_ui()
         self._apply_styles()
         self._live_timer = QTimer(self)
@@ -1063,9 +1090,9 @@ class AnalizadorApp(QMainWindow):
             logo_label.setObjectName("titleIcon")
         lay.addWidget(logo_label)
         lay.addSpacing(12)
-        title = QLabel("ANALIZADOR  LÉXICO · SINTÁCTICO · SEMÁNTICO")
+        title = QLabel("COMPILADOR PEDIDOS")
         title.setObjectName("titleText")
-        sub = QLabel("compiladores · lenguaje de pedidos")
+        sub = QLabel("análisis en tiempo real · léxico · sintáctico · semántico")
         sub.setObjectName("titleSub")
         lay.addWidget(title)
         lay.addSpacing(14)
@@ -1084,6 +1111,7 @@ class AnalizadorApp(QMainWindow):
         for icon, tip, fn, obj in [
             ("📂", "Abrir archivo .txt", self._open_file, "btnOpen"),
             ("▶",  "Analizar código",    self._analyze,   "btnRun"),
+            ("☀",  "Activar modo claro", self._toggle_dark_mode, "btnTheme"),
             ("✕",  "Limpiar todo",       self._clear,     "btnClear"),
         ]:
             btn = QPushButton(icon)
@@ -1091,6 +1119,8 @@ class AnalizadorApp(QMainWindow):
             btn.setObjectName(obj)
             btn.setFixedSize(38, 38)
             btn.clicked.connect(fn)
+            if obj == "btnTheme":
+                self._theme_btn = btn
             lay.addWidget(btn)
         lay.addStretch()
         lbl = QLabel("LX")
@@ -1211,8 +1241,8 @@ class AnalizadorApp(QMainWindow):
         _base = os.path.dirname(os.path.abspath(__file__))
         _icon_tokens = QIcon(os.path.join(_base, "cadena-de-bloques.png"))
         _icon_errors = QIcon(os.path.join(_base, "cancelar.png"))
-        self._tabs.addTab(self._token_table, _icon_tokens, "  Tokens  ")
-        self._tabs.addTab(self._error_table, _icon_errors, "  Errores  ")
+        self._tabs.addTab(self._token_table, _icon_tokens, "  Análisis Léxico  ")
+        self._tabs.addTab(self._error_table, _icon_errors, "  Error Léxico  ")
 
         tree_tab = QWidget()
         tree_lay = QVBoxLayout(tree_tab)
@@ -1261,7 +1291,7 @@ class AnalizadorApp(QMainWindow):
         self._tabs.addTab(tree_tab, "  🌲  Árbol Sintáctico  ")
 
         self._synerr_table = self._make_table(["#", "Descripción del Error", "Fila", "Col"])
-        self._tabs.addTab(self._synerr_table, "  ⛔  Errores Sintácticos  ")
+        self._tabs.addTab(self._synerr_table, _icon_errors, "  Errores Sintácticos  ")
 
         self._symbol_table = self._make_table([
             "#", "Identificador", "Clase", "Tipo", "Valor", "Estado", "Línea"
@@ -1271,7 +1301,7 @@ class AnalizadorApp(QMainWindow):
         self._semerr_table = self._make_table([
             "#", "Código", "Error", "Descripción", "Fila", "Col"
         ])
-        self._tabs.addTab(self._semerr_table, "  ⚠  Errores Semánticos  ")
+        self._tabs.addTab(self._semerr_table, _icon_errors, "  Errores Semánticos  ")
 
         self._apply_results_table_font()
         self._update_results_zoom_label()
@@ -1290,6 +1320,29 @@ class AnalizadorApp(QMainWindow):
         t.setShowGrid(True)
         t.setAlternatingRowColors(True)
         return t
+
+    def _toggle_dark_mode(self):
+        self._dark_mode = not self._dark_mode
+        C.clear()
+        C.update(DARK_THEME if self._dark_mode else LIGHT_THEME)
+
+        self._theme_btn.setText("☀" if self._dark_mode else "🌙")
+        self._theme_btn.setToolTip("Activar modo claro" if self._dark_mode else "Activar modo oscuro")
+
+        self._apply_styles()
+        self._apply_results_table_font()
+        self._highlighter = PygmentsHighlighter(self._editor.document())
+        self._highlighter.rehighlight()
+        self._editor._highlightCurrentLine()
+        self._tree_canvas.setStyleSheet(f"background-color: {C['bg_deep']};")
+        self._tree_canvas.update()
+        self._tree_scroll.viewport().update()
+
+        if self._editor.toPlainText().strip():
+            current_tab = self._tabs.currentIndex()
+            self._perform_analysis(auto=True)
+            if not (self._active_error_signature and self._tabs.currentIndex() != current_tab):
+                self._tabs.setCurrentIndex(current_tab)
 
     def _open_file(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1364,6 +1417,8 @@ class AnalizadorApp(QMainWindow):
             syn_msg = ""
             sem_msg = ""
 
+        self._update_error_tab_navigation(lex_errors, syn_errors, sem_errors)
+
         diagnostics = self._build_editor_diagnostics(code, lex_errors, syn_errors, sem_errors)
         self._editor.set_diagnostics(diagnostics)
 
@@ -1386,9 +1441,75 @@ class AnalizadorApp(QMainWindow):
         self._symbol_table.setRowCount(0)
         self._semerr_table.setRowCount(0)
         self._editor.clear_diagnostics()
+        self._last_error_signatures = []
+        self._active_error_signature = None
         self._badge_tokens.setText("Tokens: 0")
         self._badge_errors.setText("Errores: 0")
         self._update_status(0, 0)
+
+    def _update_error_tab_navigation(self, lex_errors, syn_errors, sem_errors):
+        error_targets = self._collect_error_targets(lex_errors, syn_errors, sem_errors)
+        current_signatures = [target["signature"] for target in error_targets]
+
+        if not error_targets:
+            self._last_error_signatures = []
+            self._active_error_signature = None
+            return
+
+        previous_signatures = set(self._last_error_signatures)
+        target = next(
+            (error for error in error_targets if error["signature"] not in previous_signatures),
+            None
+        )
+
+        if target is None and self._active_error_signature not in current_signatures:
+            target = error_targets[0]
+
+        if target is not None:
+            self._focus_error_target(target)
+            self._active_error_signature = target["signature"]
+
+        self._last_error_signatures = current_signatures
+
+    def _collect_error_targets(self, lex_errors, syn_errors, sem_errors):
+        targets = []
+
+        for row, (lexema, tipo, fila, col, desc) in enumerate(lex_errors):
+            targets.append({
+                "signature": ("lexico", tipo, fila, col),
+                "tab_index": 1,
+                "table": self._error_table,
+                "row": row,
+            })
+
+        for row, (desc, fila, col) in enumerate(syn_errors):
+            targets.append({
+                "signature": ("sintactico", fila, col),
+                "tab_index": 3,
+                "table": self._synerr_table,
+                "row": row,
+            })
+
+        for row, (codigo, titulo, mensaje, fila, col) in enumerate(sem_errors):
+            targets.append({
+                "signature": ("semantico", codigo, fila, col),
+                "tab_index": 5,
+                "table": self._semerr_table,
+                "row": row,
+            })
+
+        return targets
+
+    def _focus_error_target(self, target):
+        table = target["table"]
+        row = target["row"]
+        self._tabs.setCurrentIndex(target["tab_index"])
+        if 0 <= row < table.rowCount():
+            table.clearSelection()
+            table.selectRow(row)
+            item = table.item(row, 0)
+            if item is not None:
+                table.scrollToItem(item, QTableWidget.ScrollHint.PositionAtCenter)
 
     def _build_editor_diagnostics(self, code, lex_errors, syn_errors, sem_errors):
         lineas = code.split("\n")
@@ -1538,7 +1659,7 @@ class AnalizadorApp(QMainWindow):
         for idx, (lexema, tipo, fila, col, desc) in enumerate(errores, start=1):
             r = self._error_table.rowCount()
             self._error_table.insertRow(r)
-            for c, val in enumerate([idx, lexema, tipo, fila, col, desc]):
+            for c, val in enumerate([idx, lexema, "Error Léxico", fila, col, desc]):
                 item = QTableWidgetItem(str(val))
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 item.setForeground(QColor(C["red"]))
@@ -1986,6 +2107,13 @@ class AnalizadorApp(QMainWindow):
             border-radius: 10px;
             font-size: 16px;
         }}
+        QPushButton#btnTheme {{
+            background: transparent;
+            color: {C["amber"]};
+            border: 1px solid {C["amber"]}55;
+            border-radius: 10px;
+            font-size: 16px;
+        }}
         QPushButton#btnClear {{
             background: transparent;
             color: {C["red"]};
@@ -2000,6 +2128,10 @@ class AnalizadorApp(QMainWindow):
         QPushButton#btnRun:hover   {{
             background: {C["green"]}22;
             border-color: {C["green"]};
+        }}
+        QPushButton#btnTheme:hover {{
+            background: {C["amber"]}22;
+            border-color: {C["amber"]};
         }}
         QPushButton#btnClear:hover {{
             background: {C["red"]}22;

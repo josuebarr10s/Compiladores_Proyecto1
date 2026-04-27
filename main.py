@@ -2,7 +2,7 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
-from analizador_sintactico import AnalizadorApp
+from IU.interfaz_grafica import AnalizadorApp
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
